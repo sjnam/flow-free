@@ -3,7 +3,7 @@
 https://en.wikipedia.org/wiki/Flow_Free
 
 ```
-go run . sample.txt
+> ./flow-free sample.txt
 === sample.txt ===
 Puzzle (10 x 10), 8 colors
 ┌──────────────────────────────┐
@@ -20,7 +20,7 @@ Puzzle (10 x 10), 8 colors
 └──────────────────────────────┘
 
 Solving...
-Calls: 1094115  Elapsed: 4.793127583s
+Calls: 225791  Elapsed: 854.998792ms
 
 ┌──────────────────────────────┐
 │ R  R  R  R  R  R  R  O  O  O │
