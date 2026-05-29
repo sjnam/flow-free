@@ -1,19 +1,19 @@
 package main
 
-// MaxColors는 지원하는 최대 색상 수입니다.
+// MaxColors is the maximum number of supported colors.
 const MaxColors = 16
 
-// State는 풀이 과정의 현재 상태입니다.
+// State represents the current state during solving.
 type State struct {
 	Puzzle  *Puzzle
 	Grid    [][]Color
-	Heads   [MaxColors + 1]Point // Color(1..K) 인덱스 배열
+	Heads   [MaxColors + 1]Point // indexed by Color(1..K)
 	Targets [MaxColors + 1]Point
 	Done    [MaxColors + 1]bool
 	Filled  int
 }
 
-// NewState는 퍼즐의 초기 상태를 만듭니다.
+// NewState creates the initial state for a puzzle.
 func NewState(pz *Puzzle) *State {
 	h, w := pz.H, pz.W
 	flat := make([]Color, h*w)
@@ -43,8 +43,8 @@ func NewState(pz *Puzzle) *State {
 	}
 }
 
-// Clone은 상태를 깊은 복사합니다 (백트래킹용).
-// map 대신 배열을 사용하므로 구조체 복사만으로 완성됩니다.
+// Clone deep-copies the state (for backtracking).
+// Uses arrays instead of maps, so a struct copy suffices.
 func (s *State) Clone() *State {
 	h, w := s.Puzzle.H, s.Puzzle.W
 	flat := make([]Color, h*w)
@@ -56,14 +56,14 @@ func (s *State) Clone() *State {
 	return &State{
 		Puzzle:  s.Puzzle,
 		Grid:    grid,
-		Heads:   s.Heads,   // 배열 값 복사 (힙 할당 없음)
+		Heads:   s.Heads,   // array value copy (no heap allocation)
 		Targets: s.Targets,
 		Done:    s.Done,
 		Filled:  s.Filled,
 	}
 }
 
-// CanMove는 색상 c의 현재 head를 p로 이동할 수 있는지 확인합니다.
+// CanMove reports whether color c's head can move to p.
 func (s *State) CanMove(c Color, p Point) bool {
 	if !s.Puzzle.InBounds(p) {
 		return false
@@ -75,7 +75,7 @@ func (s *State) CanMove(c Color, p Point) bool {
 	return p == s.Targets[c] && cell == c
 }
 
-// Move는 색상 c의 head를 p로 이동시킵니다.
+// Move advances color c's head to p.
 func (s *State) Move(c Color, p Point) {
 	if s.Grid[p.Y][p.X] == Empty {
 		s.Grid[p.Y][p.X] = c
@@ -87,7 +87,7 @@ func (s *State) Move(c Color, p Point) {
 	}
 }
 
-// IsSolved는 모든 색상이 연결되고 격자가 꽉 찼는지 확인합니다.
+// IsSolved reports whether all colors are connected and the grid is full.
 func (s *State) IsSolved() bool {
 	if s.Filled != s.Puzzle.W*s.Puzzle.H {
 		return false

@@ -2,9 +2,9 @@ package main
 
 import "sort"
 
-// BFS 전역 재사용 버퍼 — 힙 할당 없이 canReach/isConnected를 실행합니다.
-// 솔버는 단일 스레드이므로 안전합니다.
-const maxGridCells = 256 // 최대 16×16
+// Global reusable BFS buffer — runs canReach/isConnected without heap allocation.
+// Safe because the solver is single-threaded.
+const maxGridCells = 256 // max 16×16
 
 var (
 	bfsQ   [maxGridCells]Point
@@ -155,8 +155,8 @@ func pickColor(s *State) (Color, []Point) {
 	return best, bestMoves
 }
 
-// canReach는 색상 c의 head에서 target까지 빈 칸만 통해 도달 가능한지 BFS로 확인합니다.
-// 전역 버퍼를 재사용하므로 할당이 없습니다.
+// canReach uses BFS to check whether color c's head can reach its target through empty cells.
+// Reuses the global buffer, so no allocations.
 func canReach(s *State, c Color) bool {
 	pz := s.Puzzle
 	start := s.Heads[c]
@@ -208,7 +208,7 @@ func manhattan(a, b Point) int {
 	return dx + dy
 }
 
-// parityCheck는 체스판 격자 채색으로 전체 패리티 제약을 확인합니다.
+// parityCheck verifies the global parity constraint using a checkerboard coloring.
 func parityCheck(s *State) bool {
 	pz := s.Puzzle
 	nb, nw := 0, 0
@@ -242,9 +242,9 @@ func parityCheck(s *State) bool {
 	return delta == nb-nw
 }
 
-// isConnected는 BFS로 모든 빈 칸이 연결되어 있는지 확인합니다.
-// 미완성 색상의 head 위치도 통로로 포함합니다.
-// 전역 버퍼를 재사용하므로 할당이 없습니다.
+// isConnected uses BFS to check whether all empty cells are connected.
+// Head positions of incomplete colors are also treated as passable.
+// Reuses the global buffer, so no allocations.
 func isConnected(s *State) bool {
 	pz := s.Puzzle
 	emptyCount := pz.W*pz.H - s.Filled
@@ -254,7 +254,7 @@ func isConnected(s *State) bool {
 
 	w := pz.W
 
-	// head 위치를 통로로 마킹
+	// Mark head positions as passable
 	bfsGen++
 	headGen := bfsGen
 	for _, c := range pz.Colors {
@@ -264,7 +264,7 @@ func isConnected(s *State) bool {
 		}
 	}
 
-	// 첫 번째 빈 칸 찾기
+	// Find the first empty cell
 	var startX, startY int
 	found := false
 outer:

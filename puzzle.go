@@ -1,11 +1,11 @@
 package main
 
-// Color는 격자 셀의 색상을 나타냅니다. 0은 빈칸입니다.
+// Color represents a grid cell's color. 0 means empty.
 type Color int
 
 const Empty Color = 0
 
-// Point는 격자 위의 좌표입니다.
+// Point is a coordinate on the grid.
 type Point struct {
 	X, Y int
 }
@@ -14,20 +14,20 @@ func (p Point) Add(d Point) Point {
 	return Point{p.X + d.X, p.Y + d.Y}
 }
 
-// 상하좌우 이동 방향
+// Up, down, left, right movement directions.
 var Dirs = []Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
 
-// Puzzle은 문제 원본 데이터입니다. 풀이 중 변경되지 않습니다.
+// Puzzle holds the original problem data and does not change during solving.
 type Puzzle struct {
 	W, H       int
 	Endpoints  map[Color][2]Point
 	Colors     []Color
-	ColorNames map[Color]string // 파싱된 경우 원래 문자 (예: "R", "G")
+	ColorNames map[Color]string // original characters when parsed (e.g., "R", "G")
 }
 
-// NewPuzzle은 2D 배열로부터 Puzzle을 생성합니다.
-// grid[y][x] 값이 0이면 빈칸, 양수면 색상 번호입니다.
-// names는 선택적으로 색상 번호 → 표시 문자 매핑을 제공합니다.
+// NewPuzzle creates a Puzzle from a 2D grid.
+// grid[y][x] of 0 means empty; positive values are color indices.
+// names optionally provides a color index → display character mapping.
 func NewPuzzle(grid [][]Color, names ...map[Color]string) *Puzzle {
 	h := len(grid)
 	w := len(grid[0])
@@ -66,7 +66,7 @@ func NewPuzzle(grid [][]Color, names ...map[Color]string) *Puzzle {
 	return pz
 }
 
-// InBounds는 좌표가 격자 범위 안에 있는지 확인합니다.
+// InBounds reports whether the point is within the grid.
 func (pz *Puzzle) InBounds(p Point) bool {
 	return p.X >= 0 && p.X < pz.W && p.Y >= 0 && p.Y < pz.H
 }

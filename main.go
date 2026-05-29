@@ -11,36 +11,36 @@ func run(name string, grid [][]Color, names map[Color]string) {
 	pz := NewPuzzle(grid, names)
 	PrintPuzzle(pz, grid)
 
-	fmt.Println("\n풀이 중...")
+	fmt.Println("\nSolving...")
 	start := time.Now()
 	result, calls := Solve(NewState(pz))
 	elapsed := time.Since(start)
 
-	fmt.Printf("호출 횟수: %d회  소요 시간: %v\n\n", calls, elapsed)
+	fmt.Printf("Calls: %d  Elapsed: %v\n\n", calls, elapsed)
 	if result == nil {
-		fmt.Println("풀 수 없습니다.")
+		fmt.Println("No solution found.")
 		return
 	}
 	PrintState(result)
 	fmt.Println()
 }
 
-const usage = `사용법:
-  go run . puzzle.txt       파일에서 퍼즐 읽기
-  go run . -                표준 입력에서 퍼즐 읽기
+const usage = `Usage:
+  go run . puzzle.txt       read puzzle from file
+  go run . -                read puzzle from stdin
 
-퍼즐 형식 (puzzle.txt 예시):
-  # 주석은 '#'으로 시작
+Puzzle format (puzzle.txt example):
+  # comments start with '#'
   R . . . B
   . . . . .
   . G . B .
   . . . . .
   R . G . .
 
-  규칙:
-  - 알파벳 대소문자: 색상 endpoint (한 색상당 정확히 2개)
-  - '.' 또는 '0': 빈 칸
-  - 공백 구분("R . B") 또는 붙여쓰기("R.B") 모두 가능
+  Rules:
+  - letters (upper/lower): color endpoints (exactly 2 per color)
+  - '.' or '0': empty cell
+  - space-separated ("R . B") or packed ("R.B") are both accepted
 `
 
 func main() {
@@ -49,7 +49,7 @@ func main() {
 		return
 	}
 
-	// 파일 또는 stdin에서 퍼즐 읽기
+	// Read puzzle from file or stdin
 	var (
 		grid  [][]Color
 		names map[Color]string
@@ -61,7 +61,7 @@ func main() {
 	} else {
 		f, openErr := os.Open(os.Args[1])
 		if openErr != nil {
-			fmt.Fprintf(os.Stderr, "오류: %v\n", openErr)
+			fmt.Fprintf(os.Stderr, "error: %v\n", openErr)
 			os.Exit(1)
 		}
 		defer f.Close()
@@ -69,7 +69,7 @@ func main() {
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "파싱 오류: %v\n", err)
+		fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 		os.Exit(1)
 	}
 

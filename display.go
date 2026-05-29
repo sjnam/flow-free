@@ -67,7 +67,7 @@ func colorize(pz *Puzzle, c Color, s string) string {
 	return code + s + reset
 }
 
-// PrintPuzzle은 초기 퍼즐 상태(endpoint만)를 출력합니다.
+// PrintPuzzle prints the initial puzzle state (endpoints only).
 func PrintPuzzle(pz *Puzzle, initGrid [][]Color) {
 	fmt.Printf("Puzzle (%d x %d), %d colors\n", pz.W, pz.H, len(pz.Colors))
 	printGrid(pz, pz.W, pz.H, func(x, y int) Color {
@@ -75,8 +75,8 @@ func PrintPuzzle(pz *Puzzle, initGrid [][]Color) {
 	})
 }
 
-// PrintState는 풀이 상태 전체를 출력합니다.
-// 경로 셀도 endpoint와 동일하게 색상 문자로 표시합니다.
+// PrintState prints the full solution state.
+// Path cells are displayed as color characters, same as endpoints.
 func PrintState(s *State) {
 	printGrid(s.Puzzle, s.Puzzle.W, s.Puzzle.H, func(x, y int) Color {
 		return s.Grid[y][x]
@@ -84,9 +84,9 @@ func PrintState(s *State) {
 	fmt.Printf("Filled: %d/%d\n", s.Filled, s.Puzzle.W*s.Puzzle.H)
 }
 
-// printGrid는 격자를 출력합니다.
-// getCell(x, y)은 해당 셀의 색상을 반환합니다 (Empty=0이면 '.').
-// 테두리 너비는 셀 하나당 정확히 3칸(─ ─ ─)으로 계산합니다.
+// printGrid prints the grid.
+// getCell(x, y) returns the cell's color (if Empty=0, prints '.').
+// Border width is exactly 3 chars per cell (─ ─ ─).
 func printGrid(pz *Puzzle, w, h int, getCell func(x, y int) Color) {
 	border := func(left, mid, right string) {
 		fmt.Print(left)

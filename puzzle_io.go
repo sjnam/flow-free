@@ -8,7 +8,7 @@ import (
 	"unicode"
 )
 
-// ReadPuzzle은 io.Reader에서 퍼즐 텍스트를 읽어 파싱합니다.
+// ReadPuzzle reads and parses puzzle text from an io.Reader.
 func ReadPuzzle(r io.Reader) ([][]Color, map[Color]string, error) {
 	var sb strings.Builder
 	scanner := bufio.NewScanner(r)
@@ -22,14 +22,14 @@ func ReadPuzzle(r io.Reader) ([][]Color, map[Color]string, error) {
 	return ParseGrid(sb.String())
 }
 
-// ParseGrid는 텍스트를 파싱해 격자와 색상 이름 매핑을 반환합니다.
+// ParseGrid parses text and returns a grid and color name mapping.
 //
-// 형식:
-//   - 한 줄 = 한 행
-//   - '#' 로 시작하는 줄은 주석 (무시)
-//   - 셀: 알파벳 대소문자 → 색상 endpoint, '.' 또는 '0' → 빈 칸
-//   - 셀 구분: 공백 포함("R . B") 또는 붙여쓰기("R.B") 모두 지원
-//   - 각 색상은 정확히 2번 등장해야 합니다
+// Format:
+//   - one line = one row
+//   - lines starting with '#' are comments (ignored)
+//   - cells: letters → color endpoints, '.' or '0' → empty cell
+//   - separators: space-separated ("R . B") or packed ("R.B") are both supported
+//   - each color must appear exactly twice
 func ParseGrid(text string) ([][]Color, map[Color]string, error) {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
 
@@ -42,7 +42,7 @@ func ParseGrid(text string) ([][]Color, map[Color]string, error) {
 		rows = append(rows, line)
 	}
 	if len(rows) == 0 {
-		return nil, nil, fmt.Errorf("입력이 비어 있습니다")
+		return nil, nil, fmt.Errorf("empty input")
 	}
 
 	letterToColor := map[rune]Color{}
@@ -77,7 +77,7 @@ func ParseGrid(text string) ([][]Color, map[Color]string, error) {
 		if width < 0 {
 			width = len(tokens)
 		} else if len(tokens) != width {
-			return nil, nil, fmt.Errorf("%d번 행: 칸 수 불일치 (기대 %d, 실제 %d)", y+1, width, len(tokens))
+			return nil, nil, fmt.Errorf("row %d: column count mismatch (expected %d, got %d)", y+1, width, len(tokens))
 		}
 
 		var row []Color
@@ -89,13 +89,13 @@ func ParseGrid(text string) ([][]Color, map[Color]string, error) {
 			case len(runes) == 1 && unicode.IsLetter(runes[0]):
 				row = append(row, assign(runes[0]))
 			default:
-				return nil, nil, fmt.Errorf("알 수 없는 셀 값: %q", tok)
+				return nil, nil, fmt.Errorf("unknown cell value: %q", tok)
 			}
 		}
 		grid = append(grid, row)
 	}
 
-	// 각 색상이 정확히 2번 등장하는지 검증
+	// Validate that each color appears exactly twice
 	count := map[Color]int{}
 	for _, row := range grid {
 		for _, c := range row {
@@ -106,7 +106,7 @@ func ParseGrid(text string) ([][]Color, map[Color]string, error) {
 	}
 	for c, n := range count {
 		if n != 2 {
-			return nil, nil, fmt.Errorf("색상 %q: endpoint가 %d개입니다 (정확히 2개여야 합니다)", colorNames[c], n)
+			return nil, nil, fmt.Errorf("color %q: has %d endpoints (must be exactly 2)", colorNames[c], n)
 		}
 	}
 
