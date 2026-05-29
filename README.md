@@ -1,4 +1,4 @@
-# flow-free
+# Flower Free
 
 https://en.wikipedia.org/wiki/Flow_Free
 
