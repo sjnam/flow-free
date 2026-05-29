@@ -87,6 +87,16 @@ func (s *State) Move(c Color, p Point) {
 	}
 }
 
+// UndoMove reverses Move(c, movedTo) where the head was at prevHead before that call.
+func (s *State) UndoMove(c Color, prevHead, movedTo Point) {
+	if movedTo != s.Targets[c] {
+		s.Grid[movedTo.Y][movedTo.X] = Empty
+		s.Filled--
+	}
+	s.Heads[c] = prevHead
+	s.Done[c] = false
+}
+
 // IsSolved reports whether all colors are connected and the grid is full.
 func (s *State) IsSolved() bool {
 	if s.Filled != s.Puzzle.W*s.Puzzle.H {

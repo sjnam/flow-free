@@ -1,10 +1,13 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"time"
 )
+
+var useDLX = flag.Bool("dlx", false, "use lazy online DLX solver instead of backtracking")
 
 func run(name string, grid [][]Color, names map[Color]string) {
 	fmt.Printf("=== %s ===\n", name)
@@ -13,10 +16,21 @@ func run(name string, grid [][]Color, names map[Color]string) {
 
 	fmt.Println("\nSolving...")
 	start := time.Now()
-	result, calls := Solve(NewState(pz))
+
+	var result *State
+	var calls int
+	if *useDLX {
+		result, calls = SolveDLX(pz)
+	} else {
+		result, calls = Solve(NewState(pz))
+	}
 	elapsed := time.Since(start)
 
-	fmt.Printf("Calls: %d  Elapsed: %v\n\n", calls, elapsed)
+	solver := "backtrack"
+	if *useDLX {
+		solver = "dlx"
+	}
+	fmt.Printf("[%s] Calls: %d  Elapsed: %v\n\n", solver, calls, elapsed)
 	if result == nil {
 		fmt.Println("No solution found.")
 		return
@@ -26,8 +40,11 @@ func run(name string, grid [][]Color, names map[Color]string) {
 }
 
 const usage = `Usage:
-  go run . puzzle.txt       read puzzle from file
-  go run . -                read puzzle from stdin
+  go run . [-dlx] puzzle.txt   read puzzle from file
+  go run . [-dlx] -            read puzzle from stdin
+
+Flags:
+  -dlx   use lazy online DLX solver (commit one color's full path at a time)
 
 Puzzle format (puzzle.txt example):
   # comments start with '#'
@@ -44,22 +61,25 @@ Puzzle format (puzzle.txt example):
 `
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] == "--help" || os.Args[1] == "-h" {
+	flag.Usage = func() { fmt.Print(usage) }
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) < 1 {
 		fmt.Print(usage)
 		return
 	}
 
-	// Read puzzle from file or stdin
 	var (
 		grid  [][]Color
 		names map[Color]string
 		err   error
 	)
 
-	if os.Args[1] == "-" {
+	if args[0] == "-" {
 		grid, names, err = ReadPuzzle(os.Stdin)
 	} else {
-		f, openErr := os.Open(os.Args[1])
+		f, openErr := os.Open(args[0])
 		if openErr != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", openErr)
 			os.Exit(1)
@@ -73,5 +93,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	run(os.Args[1], grid, names)
+	run(args[0], grid, names)
 }
