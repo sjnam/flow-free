@@ -120,6 +120,20 @@ func applyForcedMoves(s *State) bool {
 					changed = true
 				case emptyN == 1 && headN == 0 && targetN == 0:
 					return false
+				case emptyN == 1 && headN == 1 && targetN == 0:
+					// p has one empty neighbor (ne) and one adjacent head.
+					// If ne's only free neighbor is p, the 2-cell chain {p,ne}
+					// is a dead-end reachable only via onlyHead → force the move.
+					for _, d := range Dirs {
+						np2 := p.Add(d)
+						if pz.InBounds(np2) && s.Grid[np2.Y][np2.X] == Empty {
+							if freeNeighbors(s, np2) == 1 {
+								s.Move(onlyHead, p)
+								changed = true
+							}
+							break
+						}
+					}
 				}
 			}
 		}
@@ -139,17 +153,37 @@ func validMoves(s *State, c Color) []Point {
 	return moves
 }
 
+// freeNeighbors counts empty cells adjacent to p.
+func freeNeighbors(s *State, p Point) int {
+	n := 0
+	for _, d := range Dirs {
+		np := p.Add(d)
+		if s.Puzzle.InBounds(np) && s.Grid[np.Y][np.X] == Empty {
+			n++
+		}
+	}
+	return n
+}
+
 func pickColor(s *State) (Color, []Point) {
 	var best Color
 	var bestMoves []Point
+	bestDist := 0
+
 	for _, c := range s.Puzzle.Colors {
 		if s.Done[c] {
 			continue
 		}
 		moves := validMoves(s, c)
-		if best == Empty || len(moves) < len(bestMoves) {
+		dist := manhattan(s.Heads[c], s.Targets[c])
+		// MRV primary; tie-break by longer remaining distance first
+		// (route paths with more room needed before short ones).
+		if best == Empty ||
+			len(moves) < len(bestMoves) ||
+			(len(moves) == len(bestMoves) && dist > bestDist) {
 			best = c
 			bestMoves = moves
+			bestDist = dist
 		}
 	}
 	return best, bestMoves
