@@ -105,8 +105,7 @@ func printGrid(pz *Puzzle, w, h int, getCell func(x, y int) Color) {
 			if c == Empty {
 				fmt.Print(" . ")
 			} else {
-				ch := colorName(pz, c)
-				fmt.Print(" " + colorize(pz, c, ch) + " ")
+				fmt.Print(" " + colorize(pz, c, "●") + " ")
 			}
 		}
 		fmt.Println("│")
