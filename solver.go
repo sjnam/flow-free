@@ -30,7 +30,13 @@ func solve(s *State, calls *int) *State {
 	if !isConnected(s) {
 		return nil
 	}
+	if !noIsolatedEmptyRegion(s) {
+		return nil
+	}
 	if !parityCheck(s) {
+		return nil
+	}
+	if !crossingCheck(s) {
 		return nil
 	}
 	for _, c := range s.Puzzle.Colors {
@@ -45,7 +51,13 @@ func solve(s *State, calls *int) *State {
 	}
 
 	target := s.Targets[c]
+	// Primary: prefer tighter cells (fewer free neighbors) to fill corners first.
+	// Secondary: prefer cells closer to the target.
 	sort.Slice(moves, func(i, j int) bool {
+		ni, nj := freeNeighbors(s, moves[i]), freeNeighbors(s, moves[j])
+		if ni != nj {
+			return ni < nj
+		}
 		return manhattan(moves[i], target) < manhattan(moves[j], target)
 	})
 
@@ -274,6 +286,147 @@ func parityCheck(s *State) bool {
 	}
 
 	return delta == nb-nw
+}
+
+// noIsolatedEmptyRegion returns false if any connected component of pure empty
+// cells (heads are NOT treated as passable) has no adjacent incomplete color
+// head that can enter it.  This is strictly stronger than isConnected:
+// isConnected treats heads as bidirectional bridges, which is optimistic —
+// a head can only ENTER an adjacent region, not bridge through it.
+func noIsolatedEmptyRegion(s *State) bool {
+	pz := s.Puzzle
+	w := pz.W
+
+	bfsGen++
+	gen := bfsGen
+
+	for y := 0; y < pz.H; y++ {
+		for x := 0; x < pz.W; x++ {
+			idx := y*w + x
+			if s.Grid[y][x] != Empty || bfsVis[idx] == gen {
+				continue
+			}
+			// BFS through pure empty cells only; check for any adjacent head.
+			hasHead := false
+			bfsVis[idx] = gen
+			head, tail := 0, 0
+			bfsQ[tail] = Point{x, y}
+			tail++
+			for head < tail {
+				cur := bfsQ[head]
+				head++
+				for _, d := range Dirs {
+					np := cur.Add(d)
+					if !pz.InBounds(np) {
+						continue
+					}
+					npIdx := np.Y*w + np.X
+					if bfsVis[npIdx] == gen {
+						continue
+					}
+					if s.Grid[np.Y][np.X] == Empty {
+						bfsVis[npIdx] = gen
+						bfsQ[tail] = np
+						tail++
+					} else if !hasHead {
+						for _, c := range pz.Colors {
+							if !s.Done[c] && s.Heads[c] == np && s.CanMove(c, cur) {
+								hasHead = true
+								break
+							}
+						}
+					}
+				}
+			}
+			if !hasHead {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+
+// crossingCheck returns false if any row or column has become a bottleneck:
+// available cells (empty + already secured by must-cross colors) < colors that
+// must route through that row/column.
+//
+// A color "must cross" row r if its path spans across row r:
+//   min(head.Y, target.Y) ≤ r ≤ max(head.Y, target.Y)
+// Each such color needs ≥ 1 distinct cell in row r.  A color is "secured" if
+// it already has any colored cell in row r (endpoint or path segment).
+//
+// This fires long before isConnected (which fires only when a row is full),
+// catching branches where too many cells in a critical row are consumed by
+// colors that don't need to cross it.
+func crossingCheck(s *State) bool {
+	pz := s.Puzzle
+
+	for r := 0; r < pz.H; r++ {
+		emptyInRow := 0
+		for x := 0; x < pz.W; x++ {
+			if s.Grid[r][x] == Empty {
+				emptyInRow++
+			}
+		}
+		mustCross, secured := 0, 0
+		for _, c := range pz.Colors {
+			if s.Done[c] {
+				continue
+			}
+			minY, maxY := s.Heads[c].Y, s.Targets[c].Y
+			if minY > maxY {
+				minY, maxY = maxY, minY
+			}
+			if minY > r || maxY < r {
+				continue
+			}
+			mustCross++
+			for x := 0; x < pz.W; x++ {
+				if s.Grid[r][x] == c {
+					secured++
+					break
+				}
+			}
+		}
+		if emptyInRow+secured < mustCross {
+			return false
+		}
+	}
+
+	for col := 0; col < pz.W; col++ {
+		emptyInCol := 0
+		for y := 0; y < pz.H; y++ {
+			if s.Grid[y][col] == Empty {
+				emptyInCol++
+			}
+		}
+		mustCross, secured := 0, 0
+		for _, c := range pz.Colors {
+			if s.Done[c] {
+				continue
+			}
+			minX, maxX := s.Heads[c].X, s.Targets[c].X
+			if minX > maxX {
+				minX, maxX = maxX, minX
+			}
+			if minX > col || maxX < col {
+				continue
+			}
+			mustCross++
+			for y := 0; y < pz.H; y++ {
+				if s.Grid[y][col] == c {
+					secured++
+					break
+				}
+			}
+		}
+		if emptyInCol+secured < mustCross {
+			return false
+		}
+	}
+
+	return true
 }
 
 // isConnected uses BFS to check whether all empty cells are connected.

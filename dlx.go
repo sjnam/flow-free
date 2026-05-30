@@ -180,6 +180,10 @@ func dlxSolve(s *State, colors []Color, calls *int) bool {
 		dlxUndoForced(s, forced)
 		return false
 	}
+	if !noIsolatedEmptyRegion(s) {
+		dlxUndoForced(s, forced)
+		return false
+	}
 	if !dlxAllReachable(s, 0, colors) {
 		dlxUndoForced(s, forced)
 		return false
@@ -192,14 +196,18 @@ func dlxSolve(s *State, colors []Color, calls *int) bool {
 	}
 
 	// MRV: pick the color whose head can reach the fewest cells.
-	// A smaller reachable region → fewer viable paths → branch sooner.
-	best, bestN := -1, 1<<30
+	// Tie-break: longest manhattan distance to target (commit far-flung paths first).
+	// In open grids (early stages) all reach counts are equal, so the tie-break
+	// routes colors that span large distances first, anchoring the open area.
+	best, bestN, bestDist := -1, 1<<30, -1
 	for i, c := range colors {
 		if s.Done[c] {
 			continue
 		}
-		if n := dlxReachCount(s, c); n < bestN {
-			bestN, best = n, i
+		n := dlxReachCount(s, c)
+		d := manhattan(s.Heads[c], s.Targets[c])
+		if n < bestN || (n == bestN && d > bestDist) {
+			bestN, bestDist, best = n, d, i
 		}
 	}
 	if best == -1 {
@@ -282,6 +290,9 @@ func dlxPrune(s *State, c Color, rest []Color) bool {
 		return false
 	}
 	if !parityCheck(s) {
+		return false
+	}
+	if !noIsolatedEmptyRegion(s) {
 		return false
 	}
 	if !dlxAllReachable(s, c, rest) {
