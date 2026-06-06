@@ -10,7 +10,8 @@ paths that connect each pair **and fill every cell**.
 
 ```sh
 go build .
-./flow-free puzzle.txt      # solve a puzzle file
+./flow-free puzzle.txt      # solve a puzzle file (CSP solver)
+./flow-free -sat puzzle.txt # solve via SAT reduction (gophersat)
 ./flow-free -               # read a puzzle from stdin
 ```
 
@@ -101,11 +102,28 @@ domain); value ordering tries the color whose endpoint is nearest first.
 Backtracking is **trail-based** — mutations are recorded and undone in place, so
 no per-node copy of the grid is allocated.
 
+### SAT solver (`-sat`)
+
+[sat.go](sat.go) offers an alternative: reduce the puzzle to SAT and let a CDCL
+solver ([gophersat](https://github.com/crillab/gophersat)) do the work. The
+encoding is the CNF form of the same degree constraint — one boolean per
+`(cell, color)`, exactly one color per cell, endpoints fixed, and "if a cell is
+color `c` it has exactly 1 (endpoint) or 2 (interior) `c`-neighbors". The
+no-2×2-block rule is added as clauses too (one per square per color), which
+roughly halves solve time on the larger puzzles.
+
+The degree encoding alone allows a color to also form a detached closed loop, so
+loops are removed **lazily**: after each model, any color cells not connected to
+that color's endpoints are forbidden with a blocking clause and the solver runs
+again. `Rounds` reports how many solve passes this took (1 when no loop appears,
+which is the common case).
+
 ## Project layout
 
 | File | Purpose |
 | --- | --- |
 | [csp.go](csp.go) | the CSP solver: propagation, pruning, and search |
+| [sat.go](sat.go) | the SAT encoding and lazy cycle elimination |
 | [puzzle.go](puzzle.go) | `Puzzle` model and endpoint extraction |
 | [puzzle_io.go](puzzle_io.go) | parsing puzzle text |
 | [state.go](state.go) | solved-grid container |

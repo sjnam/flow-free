@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+var useSAT = flag.Bool("sat", false, "solve via SAT reduction (gophersat) instead of the CSP solver")
+
 func run(name string, grid [][]Color, names map[Color]string) {
 	fmt.Printf("=== %s ===\n", name)
 	pz := NewPuzzle(grid, names)
@@ -14,10 +16,19 @@ func run(name string, grid [][]Color, names map[Color]string) {
 
 	fmt.Println("\nSolving...")
 	start := time.Now()
-	result, calls := SolveCSP(pz)
+
+	var result *State
+	var count int
+	tag, metric := "csp", "Calls"
+	if *useSAT {
+		result, count = SolveSAT(pz)
+		tag, metric = "sat", "Rounds"
+	} else {
+		result, count = SolveCSP(pz)
+	}
 	elapsed := time.Since(start)
 
-	fmt.Printf("[csp] Calls: %d  Elapsed: %v\n\n", calls, elapsed)
+	fmt.Printf("[%s] %s: %d  Elapsed: %v\n\n", tag, metric, count, elapsed)
 	if result == nil {
 		fmt.Println("No solution found.")
 		return
@@ -27,9 +38,11 @@ func run(name string, grid [][]Color, names map[Color]string) {
 }
 
 const usage = `Usage:
-  go run . puzzle.txt   read puzzle from file
+  go run . [-sat] puzzle.txt   read puzzle from file
 
-Solver: degree-constraint CSP with AC-3 propagation.
+Solvers:
+  default  degree-constraint CSP with AC-3 propagation
+  -sat     SAT reduction solved with gophersat (CDCL)
 
 Puzzle format (puzzle.txt example):
   # comments start with '#'
