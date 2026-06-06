@@ -62,9 +62,29 @@ Filled: 64/64
 ## Puzzle format
 
 - One line per row; `#`-prefixed lines are comments.
-- Cells: a letter (case-insensitive) marks a color endpoint; `.` or `0` is empty.
+- Cells: a letter (case-insensitive) marks a color endpoint; `.` or `0` is empty;
+  `*` is a **wall** — a hole that is not part of the board.
 - Cells may be space-separated (`R . B`) or packed (`R.B`).
+- Rows may differ in length; short rows are right-padded with walls.
 - Each color must appear **exactly twice** (its two endpoints).
+
+### Non-rectangular boards
+
+Walls let the playable area take any shape inside its bounding box — for example
+an hourglass, two squares joined by a single-cell neck ([hourglass.txt](hourglass.txt)):
+
+```
+B A C            ┌─────────┐
+. . .            │ B  A  C │
+B . C            │ ●  ●  ● │
+* . *      →     │ ▒  ●  ▒ │   (▒ = wall)
+D . E            │ ●  ●  ● │
+. . .            │ D  ●  E │
+D A E            └─────────┘
+```
+
+Walls are simply excluded from every solver: they are never variables and never
+connect neighbors, and "fill the grid" means fill every playable cell.
 
 ## How it works
 
@@ -131,4 +151,4 @@ which is the common case).
 | [main.go](main.go) | CLI entry point |
 
 Sample puzzles of various sizes are included (`8x8.txt`, `9x9.txt`,
-`10x10.txt`, `11x14.txt`, …).
+`10x10.txt`, `11x14.txt`, …), plus a non-rectangular [hourglass.txt](hourglass.txt).

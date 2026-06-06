@@ -25,10 +25,12 @@ func ReadPuzzle(r io.Reader) ([][]Color, map[Color]string, error) {
 // ParseGrid parses text and returns a grid and color name mapping.
 //
 // Format:
-//   - one line = one row
-//   - lines starting with '#' are comments (ignored)
-//   - cells: letters → color endpoints, '.' or '0' → empty cell
+//   - one line = one row; lines starting with '#' are comments (ignored)
+//   - cells: letters → color endpoints, '.' or '0' → empty cell,
+//     '*' → wall (a hole that is not part of the board)
 //   - separators: space-separated ("R . B") or packed ("R.B") are both supported
+//   - rows may differ in length; short rows are right-padded with walls, so the
+//     playable area can be non-rectangular (e.g. an hourglass)
 //   - each color must appear exactly twice
 func ParseGrid(text string) ([][]Color, map[Color]string, error) {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
@@ -61,9 +63,9 @@ func ParseGrid(text string) ([][]Color, map[Color]string, error) {
 		return c
 	}
 
-	var grid [][]Color
-	width := -1
-
+	// First pass: tokenize every row.
+	tokenRows := make([][]string, len(rows))
+	width := 0
 	for y, line := range rows {
 		var tokens []string
 		if strings.ContainsRune(line, ' ') {
@@ -73,33 +75,40 @@ func ParseGrid(text string) ([][]Color, map[Color]string, error) {
 				tokens = append(tokens, string(ch))
 			}
 		}
-
-		if width < 0 {
+		tokenRows[y] = tokens
+		if len(tokens) > width {
 			width = len(tokens)
-		} else if len(tokens) != width {
-			return nil, nil, fmt.Errorf("row %d: column count mismatch (expected %d, got %d)", y+1, width, len(tokens))
 		}
+	}
 
-		var row []Color
-		for _, tok := range tokens {
+	// Second pass: build the grid, padding short rows with walls.
+	grid := make([][]Color, len(tokenRows))
+	for y, tokens := range tokenRows {
+		row := make([]Color, width)
+		for x := range row {
+			row[x] = Wall // default for padded cells
+		}
+		for x, tok := range tokens {
 			runes := []rune(tok)
 			switch {
 			case tok == "." || tok == "0":
-				row = append(row, Empty)
+				row[x] = Empty
+			case tok == "*":
+				row[x] = Wall
 			case len(runes) == 1 && unicode.IsLetter(runes[0]):
-				row = append(row, assign(runes[0]))
+				row[x] = assign(runes[0])
 			default:
-				return nil, nil, fmt.Errorf("unknown cell value: %q", tok)
+				return nil, nil, fmt.Errorf("row %d: unknown cell value: %q", y+1, tok)
 			}
 		}
-		grid = append(grid, row)
+		grid[y] = row
 	}
 
-	// Validate that each color appears exactly twice
+	// Validate that each color appears exactly twice.
 	count := map[Color]int{}
 	for _, row := range grid {
 		for _, c := range row {
-			if c != Empty {
+			if c != Empty && c != Wall {
 				count[c]++
 			}
 		}

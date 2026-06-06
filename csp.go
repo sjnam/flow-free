@@ -80,18 +80,19 @@ func newCSP(pz *Puzzle) *cspState {
 	}
 	n := pz.H * pz.W
 	cells := make([]cspCell, n)
-	for i := range cells {
-		cells[i].domain = full
-	}
-
 	neigh := make([][]int, n)
 	for y := 0; y < pz.H; y++ {
 		for x := 0; x < pz.W; x++ {
 			i := y*pz.W + x
+			if !pz.Playable(Point{x, y}) {
+				cells[i].color = Wall // never a variable; excluded from search
+				continue
+			}
+			cells[i].domain = full
 			ns := make([]int, 0, 4)
 			for _, dir := range Dirs {
 				np := Point{x, y}.Add(dir)
-				if pz.InBounds(np) {
+				if pz.Open(np) {
 					ns = append(ns, np.Y*pz.W+np.X)
 				}
 			}
@@ -517,6 +518,6 @@ func (cs *cspState) toState() *State {
 			state.Grid[y][x] = cs.cells[cs.idx(y, x)].color
 		}
 	}
-	state.Filled = pz.H * pz.W
+	state.Filled = pz.NumCells()
 	return state
 }

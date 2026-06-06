@@ -81,7 +81,7 @@ func PrintState(s *State) {
 	printGrid(s.Puzzle, s.Puzzle.W, s.Puzzle.H, func(x, y int) Color {
 		return s.Grid[y][x]
 	})
-	fmt.Printf("Filled: %d/%d\n", s.Filled, s.Puzzle.W*s.Puzzle.H)
+	fmt.Printf("Filled: %d/%d\n", s.Filled, s.Puzzle.NumCells())
 }
 
 // printGrid prints the grid.
@@ -102,9 +102,12 @@ func printGrid(pz *Puzzle, w, h int, getCell func(x, y int) Color) {
 		fmt.Print("│")
 		for x := 0; x < w; x++ {
 			c := getCell(x, y)
-			if c == Empty {
+			switch c {
+			case Wall:
+				fmt.Print("▒▒▒")
+			case Empty:
 				fmt.Print(" . ")
-			} else {
+			default:
 				fmt.Print(" " + colorize(pz, c, "●") + " ")
 			}
 		}

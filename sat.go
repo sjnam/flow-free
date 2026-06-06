@@ -68,8 +68,11 @@ func (e *satEnc) base() [][]int {
 	w := pz.W
 	var cl [][]int
 
-	// (1) Each cell has exactly one color.
+	// (1) Each playable cell has exactly one color.
 	for cell := 0; cell < pz.H*pz.W; cell++ {
+		if !pz.Playable(Point{cell % w, cell / w}) {
+			continue
+		}
 		atLeastOne := make([]int, e.K)
 		for ci := 1; ci <= e.K; ci++ {
 			atLeastOne[ci-1] = e.varID(cell, ci)
@@ -93,11 +96,14 @@ func (e *satEnc) base() [][]int {
 	// (3) Degree constraints.
 	for y := 0; y < pz.H; y++ {
 		for x := 0; x < pz.W; x++ {
+			if !pz.Playable(Point{x, y}) {
+				continue
+			}
 			cell := y*w + x
 			var nb []int
 			for _, d := range Dirs {
 				np := Point{x, y}.Add(d)
-				if pz.InBounds(np) {
+				if pz.Open(np) {
 					nb = append(nb, np.Y*w+np.X)
 				}
 			}
@@ -123,6 +129,10 @@ func (e *satEnc) base() [][]int {
 	// well-formed Flow Free puzzle, and a strong search accelerator).
 	for y := 0; y+1 < pz.H; y++ {
 		for x := 0; x+1 < pz.W; x++ {
+			if !(pz.Playable(Point{x, y}) && pz.Playable(Point{x + 1, y}) &&
+				pz.Playable(Point{x, y + 1}) && pz.Playable(Point{x + 1, y + 1})) {
+				continue
+			}
 			sq := [4]int{y*w + x, y*w + x + 1, (y+1)*w + x, (y+1)*w + x + 1}
 			for ci := 1; ci <= e.K; ci++ {
 				cl = append(cl, []int{
@@ -143,6 +153,10 @@ func (e *satEnc) decode(model []bool) [][]Color {
 	for y := 0; y < pz.H; y++ {
 		grid[y] = make([]Color, pz.W)
 		for x := 0; x < pz.W; x++ {
+			if !pz.Playable(Point{x, y}) {
+				grid[y][x] = Wall
+				continue
+			}
 			cell := y*pz.W + x
 			for ci := 1; ci <= e.K; ci++ {
 				if model[e.varID(cell, ci)-1] {
@@ -292,6 +306,6 @@ func gridToState(pz *Puzzle, grid [][]Color) *State {
 	for y := 0; y < pz.H; y++ {
 		copy(st.Grid[y], grid[y])
 	}
-	st.Filled = pz.W * pz.H
+	st.Filled = pz.NumCells()
 	return st
 }

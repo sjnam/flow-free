@@ -1,0 +1,8 @@
+# hourglass: two 3x3 squares joined by a single-cell neck
+B A C
+. . .
+B . C
+* . *
+D . E
+. . .
+D A E
