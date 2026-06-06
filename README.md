@@ -25,7 +25,7 @@ go run . puzzle.txt
 
 Input (`8x8.txt`):
 
-```
+```text
 . . . . . . . G
 . R . . . . . B
 . C . . . O . G
@@ -40,7 +40,7 @@ Running `./flow-free 8x8.txt` prints the puzzle, the search stats, and the
 solved grid (in the terminal each color is drawn as a colored dot `●`; shown
 here as letters):
 
-```
+```text
 [csp] Calls: 4  Elapsed: 75.958µs
 
 ┌────────────────────────┐
@@ -73,7 +73,7 @@ Filled: 64/64
 Walls let the playable area take any shape inside its bounding box — for example
 an hourglass, two squares joined by a single-cell neck ([hourglass.txt](hourglass.txt)):
 
-```
+```text
 B A C            ┌─────────┐
 . . .            │ B  A  C │
 B . C            │ ●  ●  ● │
