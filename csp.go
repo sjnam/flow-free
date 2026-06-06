@@ -5,27 +5,29 @@ import "math/bits"
 // SolveCSP solves the puzzle with degree-constrained CSP + AC-3 propagation.
 //
 // Encoding:
-//   Variables : one Color per cell
-//   Constraint: for each cell assigned color c,
-//               count of c-colored neighbors must equal
-//               1  if the cell is an endpoint of c
-//               2  if the cell is an interior path cell
+//
+//	Variables : one Color per cell
+//	Constraint: for each cell assigned color c,
+//	            count of c-colored neighbors must equal
+//	            1  if the cell is an endpoint of c
+//	            2  if the cell is an interior path cell
 //
 // This degree constraint completely characterises valid flow paths: a set of
 // cells where every interior node has degree 2 and both endpoints have
 // degree 1 is exactly a simple path between the two endpoints.
 //
 // Propagation (AC-3 style):
-//   After assigning cell P to color c:
-//     nc  = c-colored neighbors already assigned
-//     pc  = unassigned neighbors with c still in their domain
-//     req = 1 (endpoint) or 2 (interior)
-//     nc > req              → contradiction
-//     nc+pc < req           → contradiction
-//     nc == req             → remove c from all pc neighbors
-//     nc+pc == req          → force all pc neighbors to c
-//   When color c is removed from an unassigned cell's domain:
-//     re-check constraint of every already-assigned c-neighbor
+//
+//	After assigning cell P to color c:
+//	  nc  = c-colored neighbors already assigned
+//	  pc  = unassigned neighbors with c still in their domain
+//	  req = 1 (endpoint) or 2 (interior)
+//	  nc > req              → contradiction
+//	  nc+pc < req           → contradiction
+//	  nc == req             → remove c from all pc neighbors
+//	  nc+pc == req          → force all pc neighbors to c
+//	When color c is removed from an unassigned cell's domain:
+//	  re-check constraint of every already-assigned c-neighbor
 func SolveCSP(pz *Puzzle) (*State, int) {
 	cs := newCSP(pz)
 	if !cs.setup() {
@@ -45,9 +47,30 @@ type cspCell struct {
 	domain uint32 // bit c = color c is in the domain
 }
 
+// trailEntry records a cell's state before a mutation so it can be undone on
+// backtracking, avoiding a full clone of the grid at every search node.
+type trailEntry struct {
+	idx    int
+	color  Color
+	domain uint32
+}
+
 type cspState struct {
 	pz    *Puzzle
 	cells []cspCell // flat [y*W + x]
+	trail []trailEntry
+
+	// Precomputed, immutable lookups (set in newCSP) to keep the hot
+	// propagation/pruning loops free of map access and bounds checks.
+	neigh   [][]int               // neigh[i] = in-bounds neighbor flat indices of cell i
+	epColor []Color               // epColor[i] = color if cell i is an endpoint, else Empty
+	ep      [MaxColors + 1][2]int // ep[c] = the two endpoint flat indices of color c
+
+	// Scratch buffers for cspReachable's BFS, reused across calls. vis uses a
+	// generation counter so it never needs clearing between runs.
+	q   []int // BFS queue
+	vis []int // last generation each cell was visited
+	gen int   // current BFS generation
 }
 
 func newCSP(pz *Puzzle) *cspState {
@@ -55,28 +78,84 @@ func newCSP(pz *Puzzle) *cspState {
 	for _, c := range pz.Colors {
 		full |= 1 << uint(c)
 	}
-	cells := make([]cspCell, pz.H*pz.W)
+	n := pz.H * pz.W
+	cells := make([]cspCell, n)
 	for i := range cells {
 		cells[i].domain = full
 	}
-	return &cspState{pz: pz, cells: cells}
+
+	neigh := make([][]int, n)
+	for y := 0; y < pz.H; y++ {
+		for x := 0; x < pz.W; x++ {
+			i := y*pz.W + x
+			ns := make([]int, 0, 4)
+			for _, dir := range Dirs {
+				np := Point{x, y}.Add(dir)
+				if pz.InBounds(np) {
+					ns = append(ns, np.Y*pz.W+np.X)
+				}
+			}
+			neigh[i] = ns
+		}
+	}
+
+	epColor := make([]Color, n)
+	var ep [MaxColors + 1][2]int
+	for c, pair := range pz.Endpoints {
+		for k, p := range pair {
+			i := p.Y*pz.W + p.X
+			epColor[i] = c
+			ep[c][k] = i
+		}
+	}
+
+	return &cspState{
+		pz:      pz,
+		cells:   cells,
+		neigh:   neigh,
+		epColor: epColor,
+		ep:      ep,
+		q:       make([]int, n),
+		vis:     make([]int, n),
+	}
 }
 
-func (cs *cspState) clone() *cspState {
-	c2 := make([]cspCell, len(cs.cells))
-	copy(c2, cs.cells)
-	return &cspState{pz: cs.pz, cells: c2}
+// manhattan returns the L1 distance between two points.
+func manhattan(a, b Point) int {
+	dx := a.X - b.X
+	if dx < 0 {
+		dx = -dx
+	}
+	dy := a.Y - b.Y
+	if dy < 0 {
+		dy = -dy
+	}
+	return dx + dy
+}
+
+// record saves cell i's current state on the trail before it is mutated.
+func (cs *cspState) record(i int) {
+	cs.trail = append(cs.trail, trailEntry{i, cs.cells[i].color, cs.cells[i].domain})
+}
+
+// trailMark returns a checkpoint to roll back to.
+func (cs *cspState) trailMark() int { return len(cs.trail) }
+
+// rollback restores all cells mutated since the given mark, in reverse order.
+func (cs *cspState) rollback(mark int) {
+	for i := len(cs.trail) - 1; i >= mark; i-- {
+		e := cs.trail[i]
+		cs.cells[e.idx].color = e.color
+		cs.cells[e.idx].domain = e.domain
+	}
+	cs.trail = cs.trail[:mark]
 }
 
 func (cs *cspState) idx(y, x int) int { return y*cs.pz.W + x }
 
-func (cs *cspState) isEndpoint(y, x int, c Color) bool {
-	ep := cs.pz.Endpoints[c]
-	return ep[0] == (Point{x, y}) || ep[1] == (Point{x, y})
-}
-
-func (cs *cspState) req(y, x int, c Color) int {
-	if cs.isEndpoint(y, x, c) {
+// req is the required c-colored degree of cell i: 1 for an endpoint of c, else 2.
+func (cs *cspState) req(i int, c Color) int {
+	if cs.epColor[i] == c {
 		return 1
 	}
 	return 2
@@ -84,9 +163,8 @@ func (cs *cspState) req(y, x int, c Color) int {
 
 // ─── constraint propagation ──────────────────────────────────────────────────
 
-// setColor assigns color c to cell (y,x) and propagates degree constraints.
-func (cs *cspState) setColor(y, x int, c Color) bool {
-	i := cs.idx(y, x)
+// setColor assigns color c to cell i and propagates degree constraints.
+func (cs *cspState) setColor(i int, c Color) bool {
 	cell := &cs.cells[i]
 	if cell.color != Empty {
 		return cell.color == c
@@ -95,59 +173,58 @@ func (cs *cspState) setColor(y, x int, c Color) bool {
 		return false
 	}
 	oldDomain := cell.domain
+	cs.record(i)
 	cell.color = c
 	cell.domain = 1 << uint(c)
 
-	// For each color d ≠ c that was in the domain, (y,x) is no longer a potential
+	// For each color d ≠ c that was in the domain, cell i is no longer a potential
 	// d-neighbor for its already-assigned d-colored neighbors.
 	for d := Color(1); d <= Color(len(cs.pz.Colors)+1); d++ {
 		if d == c || (oldDomain>>uint(d))&1 == 0 {
 			continue
 		}
-		for _, dir := range Dirs {
-			np := Point{x, y}.Add(dir)
-			if !cs.pz.InBounds(np) {
-				continue
-			}
-			ni := cs.idx(np.Y, np.X)
+		for _, ni := range cs.neigh[i] {
 			if cs.cells[ni].color == d {
-				if !cs.checkCell(np.Y, np.X, d) {
+				if !cs.checkCell(ni, d) {
 					return false
 				}
 			}
 		}
 	}
-	return cs.checkCell(y, x, c)
-}
-
-// removeDomain removes color c from the domain of unassigned cell (y,x) and propagates.
-func (cs *cspState) removeDomain(y, x int, c Color) bool {
-	i := cs.idx(y, x)
-	cell := &cs.cells[i]
-	if cell.color != Empty {
-		return cell.color != c
-	}
-	if (cell.domain>>uint(c))&1 == 0 {
-		return true
-	}
-	cell.domain &^= 1 << uint(c)
-	if cell.domain == 0 {
+	if !cs.no2x2(i, c) {
 		return false
 	}
-	// Singleton → force assignment
-	if cell.domain&(cell.domain-1) == 0 {
-		fc := Color(bits.TrailingZeros32(cell.domain))
-		return cs.setColor(y, x, fc)
-	}
-	// Re-check already-assigned c-neighbors of (y,x) (their pc just decreased).
-	for _, dir := range Dirs {
-		np := Point{x, y}.Add(dir)
-		if !cs.pz.InBounds(np) {
+	return cs.checkCell(i, c)
+}
+
+// no2x2 enforces that color c never fills a complete 2x2 block — a property that
+// holds for every well-formed Flow Free puzzle and is a major search accelerator.
+// For each 2x2 square containing cell i: four c-cells → contradiction; three
+// c-cells with the fourth still able to be c → that fourth cell cannot be c.
+func (cs *cspState) no2x2(i int, c Color) bool {
+	w, h := cs.pz.W, cs.pz.H
+	y, x := i/w, i%w
+	for _, off := range [4][2]int{{-1, -1}, {-1, 0}, {0, -1}, {0, 0}} {
+		ty, tx := y+off[0], x+off[1]
+		if ty < 0 || tx < 0 || ty+1 >= h || tx+1 >= w {
 			continue
 		}
-		ni := cs.idx(np.Y, np.X)
-		if cs.cells[ni].color == c {
-			if !cs.checkCell(np.Y, np.X, c) {
+		sq := [4]int{ty*w + tx, ty*w + tx + 1, (ty+1)*w + tx, (ty+1)*w + tx + 1}
+		nc, nEmpty, emptyIdx := 0, 0, -1
+		for _, si := range sq {
+			switch {
+			case cs.cells[si].color == c:
+				nc++
+			case cs.cells[si].color == Empty && (cs.cells[si].domain>>uint(c))&1 != 0:
+				nEmpty++
+				emptyIdx = si
+			}
+		}
+		if nc == 4 {
+			return false
+		}
+		if nc == 3 && nEmpty == 1 {
+			if !cs.removeDomain(emptyIdx, c) {
 				return false
 			}
 		}
@@ -155,18 +232,43 @@ func (cs *cspState) removeDomain(y, x int, c Color) bool {
 	return true
 }
 
-// checkCell enforces the degree constraint for cell (y,x) assigned color c.
-func (cs *cspState) checkCell(y, x int, c Color) bool {
-	if cs.cells[cs.idx(y, x)].color != c {
+// removeDomain removes color c from the domain of unassigned cell i and propagates.
+func (cs *cspState) removeDomain(i int, c Color) bool {
+	cell := &cs.cells[i]
+	if cell.color != Empty {
+		return cell.color != c
+	}
+	if (cell.domain>>uint(c))&1 == 0 {
+		return true
+	}
+	cs.record(i)
+	cell.domain &^= 1 << uint(c)
+	if cell.domain == 0 {
+		return false
+	}
+	// Singleton → force assignment
+	if cell.domain&(cell.domain-1) == 0 {
+		fc := Color(bits.TrailingZeros32(cell.domain))
+		return cs.setColor(i, fc)
+	}
+	// Re-check already-assigned c-neighbors of i (their pc just decreased).
+	for _, ni := range cs.neigh[i] {
+		if cs.cells[ni].color == c {
+			if !cs.checkCell(ni, c) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// checkCell enforces the degree constraint for cell i assigned color c.
+func (cs *cspState) checkCell(i int, c Color) bool {
+	if cs.cells[i].color != c {
 		return true // stale
 	}
 	nc, pc := 0, 0
-	for _, dir := range Dirs {
-		np := Point{x, y}.Add(dir)
-		if !cs.pz.InBounds(np) {
-			continue
-		}
-		ni := cs.idx(np.Y, np.X)
+	for _, ni := range cs.neigh[i] {
 		switch {
 		case cs.cells[ni].color == c:
 			nc++
@@ -174,7 +276,7 @@ func (cs *cspState) checkCell(y, x int, c Color) bool {
 			pc++
 		}
 	}
-	r := cs.req(y, x, c)
+	r := cs.req(i, c)
 	if nc > r {
 		return false
 	}
@@ -183,28 +285,18 @@ func (cs *cspState) checkCell(y, x int, c Color) bool {
 	}
 	if nc == r {
 		// Degree satisfied — remove c from remaining potential neighbors.
-		for _, dir := range Dirs {
-			np := Point{x, y}.Add(dir)
-			if !cs.pz.InBounds(np) {
-				continue
-			}
-			ni := cs.idx(np.Y, np.X)
+		for _, ni := range cs.neigh[i] {
 			if cs.cells[ni].color == Empty && (cs.cells[ni].domain>>uint(c))&1 != 0 {
-				if !cs.removeDomain(np.Y, np.X, c) {
+				if !cs.removeDomain(ni, c) {
 					return false
 				}
 			}
 		}
 	} else if nc+pc == r {
 		// Only possible assignment — force all potential neighbors to c.
-		for _, dir := range Dirs {
-			np := Point{x, y}.Add(dir)
-			if !cs.pz.InBounds(np) {
-				continue
-			}
-			ni := cs.idx(np.Y, np.X)
+		for _, ni := range cs.neigh[i] {
 			if cs.cells[ni].color == Empty && (cs.cells[ni].domain>>uint(c))&1 != 0 {
-				if !cs.setColor(np.Y, np.X, c) {
+				if !cs.setColor(ni, c) {
 					return false
 				}
 			}
@@ -215,9 +307,9 @@ func (cs *cspState) checkCell(y, x int, c Color) bool {
 
 // setup assigns all endpoint cells and runs initial propagation.
 func (cs *cspState) setup() bool {
-	for c, ep := range cs.pz.Endpoints {
-		for _, p := range ep {
-			if !cs.setColor(p.Y, p.X, c) {
+	for _, c := range cs.pz.Colors {
+		for _, i := range cs.ep[c] {
+			if !cs.setColor(i, c) {
 				return false
 			}
 		}
@@ -251,49 +343,39 @@ func (cs *cspState) mrvCell() int {
 // still have c in their domain.  An assigned c-cell that cannot be reached
 // this way is "orphaned" and can never be part of the valid path → prune.
 func (cs *cspState) cspReachable() bool {
-	pz := cs.pz
-	for _, c := range pz.Colors {
-		ep := pz.Endpoints[c]
-
-		bfsGen++
-		gen := bfsGen
+	for _, c := range cs.pz.Colors {
+		cs.gen++
+		gen := cs.gen
 		head, tail := 0, 0
 
-		enqueue := func(p Point) {
-			idx := p.Y*pz.W + p.X
-			if bfsVis[idx] != gen {
-				bfsVis[idx] = gen
-				bfsQ[tail] = p
+		for _, ei := range cs.ep[c] {
+			if cs.vis[ei] != gen {
+				cs.vis[ei] = gen
+				cs.q[tail] = ei
 				tail++
 			}
 		}
-		enqueue(ep[0])
-		enqueue(ep[1])
 
 		for head < tail {
-			cur := bfsQ[head]
+			cur := cs.q[head]
 			head++
-			for _, d := range Dirs {
-				np := cur.Add(d)
-				if !pz.InBounds(np) {
+			for _, ni := range cs.neigh[cur] {
+				if cs.vis[ni] == gen {
 					continue
 				}
-				ni := cs.idx(np.Y, np.X)
 				cell := &cs.cells[ni]
 				if cell.color == c || (cell.color == Empty && (cell.domain>>uint(c))&1 != 0) {
-					enqueue(np)
+					cs.vis[ni] = gen
+					cs.q[tail] = ni
+					tail++
 				}
 			}
 		}
 
 		// All assigned c-cells must have been reached.
-		for y := 0; y < pz.H; y++ {
-			for x := 0; x < pz.W; x++ {
-				if cs.cells[cs.idx(y, x)].color == c {
-					if bfsVis[y*pz.W+x] != gen {
-						return false
-					}
-				}
+		for i := range cs.cells {
+			if cs.cells[i].color == c && cs.vis[i] != gen {
+				return false
 			}
 		}
 	}
@@ -305,16 +387,18 @@ func (cs *cspState) cspReachable() bool {
 func (cs *cspState) cspCrossingCheck() bool {
 	pz := cs.pz
 
+	w := pz.W
 	for r := 0; r < pz.H; r++ {
+		base := r * w
 		empty := 0
-		for x := 0; x < pz.W; x++ {
-			if cs.cells[cs.idx(r, x)].color == Empty {
+		for x := 0; x < w; x++ {
+			if cs.cells[base+x].color == Empty {
 				empty++
 			}
 		}
 		mustCross, secured := 0, 0
-		for c, ep := range pz.Endpoints {
-			minY, maxY := ep[0].Y, ep[1].Y
+		for _, c := range pz.Colors {
+			minY, maxY := cs.ep[c][0]/w, cs.ep[c][1]/w
 			if minY > maxY {
 				minY, maxY = maxY, minY
 			}
@@ -322,8 +406,8 @@ func (cs *cspState) cspCrossingCheck() bool {
 				continue
 			}
 			mustCross++
-			for x := 0; x < pz.W; x++ {
-				if cs.cells[cs.idx(r, x)].color == c {
+			for x := 0; x < w; x++ {
+				if cs.cells[base+x].color == c {
 					secured++
 					break
 				}
@@ -334,16 +418,16 @@ func (cs *cspState) cspCrossingCheck() bool {
 		}
 	}
 
-	for col := 0; col < pz.W; col++ {
+	for col := 0; col < w; col++ {
 		empty := 0
 		for y := 0; y < pz.H; y++ {
-			if cs.cells[cs.idx(y, col)].color == Empty {
+			if cs.cells[y*w+col].color == Empty {
 				empty++
 			}
 		}
 		mustCross, secured := 0, 0
-		for c, ep := range pz.Endpoints {
-			minX, maxX := ep[0].X, ep[1].X
+		for _, c := range pz.Colors {
+			minX, maxX := cs.ep[c][0]%w, cs.ep[c][1]%w
 			if minX > maxX {
 				minX, maxX = maxX, minX
 			}
@@ -352,7 +436,7 @@ func (cs *cspState) cspCrossingCheck() bool {
 			}
 			mustCross++
 			for y := 0; y < pz.H; y++ {
-				if cs.cells[cs.idx(y, col)].color == c {
+				if cs.cells[y*w+col].color == c {
 					secured++
 					break
 				}
@@ -414,13 +498,11 @@ func cspSearch(cs *cspState, calls *int) bool {
 	}
 
 	for i := 0; i < nvals; i++ {
-		clone := cs.clone()
-		if clone.setColor(y, x, vals[i].c) {
-			if cspSearch(clone, calls) {
-				cs.cells = clone.cells
-				return true
-			}
+		mark := cs.trailMark()
+		if cs.setColor(best, vals[i].c) && cspSearch(cs, calls) {
+			return true
 		}
+		cs.rollback(mark)
 	}
 	return false
 }
@@ -432,14 +514,9 @@ func (cs *cspState) toState() *State {
 	state := NewState(pz)
 	for y := 0; y < pz.H; y++ {
 		for x := 0; x < pz.W; x++ {
-			c := cs.cells[cs.idx(y, x)].color
-			state.Grid[y][x] = c
+			state.Grid[y][x] = cs.cells[cs.idx(y, x)].color
 		}
 	}
 	state.Filled = pz.H * pz.W
-	for _, c := range pz.Colors {
-		state.Done[c] = true
-		state.Heads[c] = pz.Endpoints[c][1] // head ends at target
-	}
 	return state
 }

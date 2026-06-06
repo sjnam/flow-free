@@ -7,9 +7,6 @@ import (
 	"time"
 )
 
-var useDLX = flag.Bool("dlx", false, "use lazy online DLX solver instead of backtracking")
-var useCSP = flag.Bool("csp", false, "use degree-constraint CSP solver with AC-3 propagation")
-
 func run(name string, grid [][]Color, names map[Color]string) {
 	fmt.Printf("=== %s ===\n", name)
 	pz := NewPuzzle(grid, names)
@@ -17,27 +14,10 @@ func run(name string, grid [][]Color, names map[Color]string) {
 
 	fmt.Println("\nSolving...")
 	start := time.Now()
-
-	var result *State
-	var calls int
-	switch {
-	case *useCSP:
-		result, calls = SolveCSP(pz)
-	case *useDLX:
-		result, calls = SolveDLX(pz)
-	default:
-		result, calls = Solve(NewState(pz))
-	}
+	result, calls := SolveCSP(pz)
 	elapsed := time.Since(start)
 
-	solver := "backtrack"
-	if *useDLX {
-		solver = "dlx"
-	}
-	if *useCSP {
-		solver = "csp"
-	}
-	fmt.Printf("[%s] Calls: %d  Elapsed: %v\n\n", solver, calls, elapsed)
+	fmt.Printf("[csp] Calls: %d  Elapsed: %v\n\n", calls, elapsed)
 	if result == nil {
 		fmt.Println("No solution found.")
 		return
@@ -47,11 +27,9 @@ func run(name string, grid [][]Color, names map[Color]string) {
 }
 
 const usage = `Usage:
-  go run . [-dlx|-csp] puzzle.txt   read puzzle from file
+  go run . puzzle.txt   read puzzle from file
 
-Flags:
-  -dlx   lazy online DLX solver (commit one color's full path at a time)
-  -csp   degree-constraint CSP with AC-3 propagation
+Solver: degree-constraint CSP with AC-3 propagation.
 
 Puzzle format (puzzle.txt example):
   # comments start with '#'
