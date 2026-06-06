@@ -5,18 +5,18 @@ import "fmt"
 const reset = "\033[0m"
 
 var letterANSI = map[byte]string{
-	'R': "\033[31m",
-	'B': "\033[34m",
-	'G': "\033[32m",
-	'Y': "\033[33m",
-	'M': "\033[35m",
-	'C': "\033[36m",
-	'W': "\033[37m",
-	'P': "\033[95m",
-	'O': "\033[91m",
-	'A': "\033[92m",
-	'D': "\033[94m",
-	'V': "\033[35m",
+	'R': "\033[31m", // Red
+	'B': "\033[34m", // Blue
+	'G': "\033[32m", // Green
+	'Y': "\033[33m", // Yellow
+	'M': "\033[35m", // Magenta
+	'C': "\033[36m", // Cyan
+	'W': "\033[37m", // White
+	'P': "\033[95m", // Pink (bright magenta)
+	'O': "\033[91m", // Orange (bright red)
+	'A': "\033[92m", // lime (bright green)
+	'D': "\033[94m", // light blue (bright blue)
+	'V': "\033[35m", // Violet (magenta)
 }
 
 var indexANSI = []string{
